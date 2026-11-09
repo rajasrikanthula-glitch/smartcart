@@ -9,3 +9,8 @@ config.py
 migrate_mysql_to_sqlite.py
 static/uploads/user_profiles/
 static/uploads/admin_profiles/
+static/uploads/product_images/*
+!static/uploads/product_images/.gitkeep
+
+static/uploads/admin_profiles/*
+!static/uploads/admin_profiles/.gitkeep
