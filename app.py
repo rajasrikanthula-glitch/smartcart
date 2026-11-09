@@ -472,6 +472,72 @@ def delete_item(item_id):
     return redirect('/admin/item-list')
 
 
+# =================================================================
+# ROUTE: DELETE ALL PRODUCTS
+# =================================================================
+@app.route('/admin/delete-all-items')
+def delete_all_items():
+    if 'admin_id' not in session:
+        flash("Please login first!", "danger")
+        return redirect('/admin-login')
+
+    admin_id = session['admin_id']
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # Check products belonging to this admin
+        cursor.execute("SELECT product_id, image FROM products WHERE admin_id=?", (admin_id,))
+        products_to_delete = cursor.fetchall()
+
+        # If none with this specific admin_id, allow cleaning up all products
+        if not products_to_delete:
+            cursor.execute("SELECT product_id, image FROM products")
+            products_to_delete = cursor.fetchall()
+
+        if not products_to_delete:
+            flash("No products found to delete.", "info")
+            return redirect('/admin/item-list')
+
+        prod_ids = [p['product_id'] for p in products_to_delete]
+        placeholders = ','.join('?' for _ in prod_ids)
+
+        # Remove referencing order items first to satisfy foreign keys
+        cursor.execute(f"DELETE FROM order_items WHERE product_id IN ({placeholders})", prod_ids)
+
+        # Delete the products
+        cursor.execute(f"DELETE FROM products WHERE product_id IN ({placeholders})", prod_ids)
+        conn.commit()
+
+        # Clean up images if no longer used
+        for p in products_to_delete:
+            image_name = p.get('image')
+            if image_name:
+                cursor.execute("SELECT COUNT(*) AS c FROM products WHERE image=?", (image_name,))
+                still_used = cursor.fetchone()['c']
+                if not still_used:
+                    image_path = os.path.join(app.config.get('UPLOAD_FOLDER', 'static/uploads/product_images'), image_name)
+                    if os.path.exists(image_path):
+                        try:
+                            os.remove(image_path)
+                        except Exception:
+                            pass
+
+        flash(f"Successfully deleted {len(products_to_delete)} products!", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Error deleting products: {e}", "danger")
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+    return redirect('/admin/item-list')
+
+
 #=================================================================
 # ROUTE 10: VIEW SINGLE PRODUCT DETAILS
 # =================================================================
